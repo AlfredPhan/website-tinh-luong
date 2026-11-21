@@ -2,61 +2,146 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f4f6fb">
     <title>Tính Lương Theo Ngày Công</title>
+    <script>
+        // Apply the saved theme before first paint to avoid a flash
+        try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+    </script>
     <style>
         :root {
             --bg: #f4f6fb; --card: #fff; --text: #1f2937; --muted: #6b7280;
-            --primary: #2563eb; --primary-soft: #dbeafe; --half: #fde68a;
-            --off: #f3f4f6; --border: #e5e7eb; --ok: #059669;
+            --primary: #2563eb; --primary-soft: #dbeafe; --on-primary: #fff; --on-primary-muted: #dbeafe;
+            --half: #fde68a; --half-border: #f59e0b; --half-text: #1f2937;
+            --off: #f3f4f6; --border: #e5e7eb; --ok: #059669; --today: #ef4444;
+            --input-bg: #fff; --shadow: 0 1px 3px rgba(0,0,0,.06);
+            color-scheme: light;
         }
-        * { box-sizing: border-box; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #0f172a; --card: #1e293b; --text: #e5e7eb; --muted: #94a3b8;
+                --primary: #3b82f6; --primary-soft: #1e3a5f; --on-primary: #fff; --on-primary-muted: #bfdbfe;
+                --half: #a16207; --half-border: #eab308; --half-text: #fef9c3;
+                --off: #273449; --border: #334155; --ok: #34d399; --today: #f87171;
+                --input-bg: #0f172a; --shadow: 0 1px 3px rgba(0,0,0,.4);
+                color-scheme: dark;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #0f172a; --card: #1e293b; --text: #e5e7eb; --muted: #94a3b8;
+            --primary: #3b82f6; --primary-soft: #1e3a5f; --on-primary: #fff; --on-primary-muted: #bfdbfe;
+            --half: #a16207; --half-border: #eab308; --half-text: #fef9c3;
+            --off: #273449; --border: #334155; --ok: #34d399; --today: #f87171;
+            --input-bg: #0f172a; --shadow: 0 1px 3px rgba(0,0,0,.4);
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { -webkit-text-size-adjust: 100%; }
         body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-               background: var(--bg); color: var(--text); }
-        .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+               background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
+        .wrap { max-width: 760px; margin: 0 auto;
+                padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+                         max(48px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+        .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
         h1 { font-size: 1.6rem; margin: 0 0 4px; }
         .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+        .theme-toggle { flex-shrink: 0; width: 44px; height: 44px; padding: 0; font-size: 1.2rem;
+                        border: 1px solid var(--border); background: var(--card); }
         .card { background: var(--card); border-radius: 14px; padding: 20px;
-                box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px; }
+                box-shadow: var(--shadow); margin-bottom: 16px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
         label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
-        input, select { width: 100%; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--border);
-                        border-radius: 10px; background: #fff; color: var(--text); }
-        input:focus, select:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
-        button { cursor: pointer; border: 0; border-radius: 10px; padding: 9px 14px; font-size: .9rem;
-                 background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+        /* 16px inputs keep iPhone Safari from zooming in on focus */
+        input { width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; font-family: inherit;
+                border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text);
+                -webkit-appearance: none; appearance: none; }
+        input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+        button { cursor: pointer; border: 0; border-radius: 10px; padding: 9px 14px; min-height: 40px;
+                 font-size: .9rem; font-family: inherit; font-weight: 600;
+                 background: var(--primary-soft); color: var(--primary); touch-action: manipulation; }
         button:hover { filter: brightness(.95); }
         .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
         .result { text-align: center; }
-        .result .money { font-size: 2.2rem; font-weight: 800; color: var(--ok); margin: 6px 0; }
+        .result .money { font-size: 2.2rem; font-weight: 800; color: var(--ok); margin: 6px 0; overflow-wrap: anywhere; }
         .result .detail { color: var(--muted); font-size: .9rem; }
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
         .stat { background: var(--bg); border-radius: 10px; padding: 10px; text-align: center; }
         .stat b { display: block; font-size: 1.2rem; }
         .stat span { font-size: .8rem; color: var(--muted); }
-        .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .cal-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
         .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
         .dow { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 600; }
         .day { aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--border); background: var(--off);
                display: flex; flex-direction: column; align-items: center; justify-content: center;
-               cursor: pointer; user-select: none; font-size: .95rem; position: relative; }
+               cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: manipulation;
+               font-size: .95rem; position: relative; }
         .day small { font-size: .65rem; color: var(--muted); }
-        .day.full { background: var(--primary); color: #fff; border-color: var(--primary); }
-        .day.full small { color: #dbeafe; }
-        .day.half { background: var(--half); border-color: #f59e0b; }
-        .day.today { outline: 2px solid #ef4444; outline-offset: 1px; }
+        .day.full { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+        .day.full small { color: var(--on-primary-muted); }
+        .day.half { background: var(--half); border-color: var(--half-border); color: var(--half-text); }
+        .day.half small { color: var(--half-text); }
+        .day.today { outline: 2px solid var(--today); outline-offset: 1px; }
         .day.empty { visibility: hidden; }
         .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .8rem; color: var(--muted); margin-top: 10px; }
         .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+        .lg-full { background: var(--primary); }
+        .lg-half { background: var(--half); }
+        .lg-off { background: var(--off); border: 1px solid var(--border); }
+        .lg-today { border: 2px solid var(--today); }
         .info { font-size: .88rem; color: var(--muted); line-height: 1.6; }
         .info b { color: var(--text); }
+
+        @media (hover: hover) {
+            .day:not(.empty):hover { border-color: var(--primary); }
+        }
+
+        /* Laptop / PC: inputs and result on the left, calendar on the right */
+        @media (min-width: 960px) {
+            .wrap { max-width: 1120px; padding-top: 40px; }
+            h1 { font-size: 2rem; }
+            .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+            .card { margin-bottom: 20px; }
+            .result .money { font-size: 2.6rem; }
+            .day { font-size: 1rem; }
+            .day small { font-size: .7rem; }
+        }
+
+        /* Phones (iPhone and similar) */
+        @media (max-width: 480px) {
+            h1 { font-size: 1.3rem; }
+            .sub { font-size: .85rem; margin-bottom: 14px; }
+            .card { padding: 14px; border-radius: 12px; margin-bottom: 12px; }
+            .grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .grid > div:first-child { grid-column: 1 / -1; }
+            .actions { display: grid; grid-template-columns: 1fr 1fr; }
+            .actions button:first-child { grid-column: 1 / -1; }
+            .result .money { font-size: 1.9rem; }
+            .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .stat b { font-size: 1.05rem; }
+            .cal { gap: 4px; }
+            .day { border-radius: 8px; font-size: .85rem; }
+            .day small { font-size: .55rem; }
+            .cal-head .info { font-size: .78rem; }
+        }
+        @media (max-width: 360px) {
+            .day small { display: none; }
+        }
     </style>
 </head>
 <body>
 <div class="wrap">
-    <h1>💰 Tính Lương Theo Ngày Công</h1>
-    <p class="sub" id="todayText"></p>
+    <div class="top">
+        <div>
+            <h1>💰 Tính Lương Theo Ngày Công</h1>
+            <p class="sub" id="todayText"></p>
+        </div>
+        <button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện sáng / tối" title="Đổi giao diện sáng / tối">🌙</button>
+    </div>
 
+    <div class="layout">
+    <div>
     <div class="card">
         <div class="grid">
             <div>
@@ -69,11 +154,11 @@
             </div>
             <div>
                 <label for="standard">Công chuẩn / tháng</label>
-                <input id="standard" type="number" step="0.5" min="1" value="24.5">
+                <input id="standard" type="number" inputmode="decimal" step="0.5" min="1" value="24.5">
             </div>
             <div>
                 <label for="worked">Số ngày công đã làm</label>
-                <input id="worked" type="number" step="0.5" min="0" placeholder="VD: 22">
+                <input id="worked" type="number" inputmode="decimal" step="0.5" min="0" placeholder="VD: 22">
             </div>
         </div>
         <div class="actions">
@@ -94,7 +179,9 @@
             <div class="stat"><b id="sPayday">—</b><span>Ngày nhận lương</span></div>
         </div>
     </div>
+    </div>
 
+    <div>
     <div class="card">
         <div class="cal-head">
             <b id="calTitle"></b>
@@ -102,10 +189,10 @@
         </div>
         <div class="cal" id="cal"></div>
         <div class="legend">
-            <span><i style="background:var(--primary)"></i>1 công</span>
-            <span><i style="background:var(--half)"></i>0.5 công</span>
-            <span><i style="background:var(--off);border:1px solid var(--border)"></i>Nghỉ</span>
-            <span><i style="border:2px solid #ef4444"></i>Hôm nay</span>
+            <span><i class="lg-full"></i>1 công</span>
+            <span><i class="lg-half"></i>0.5 công</span>
+            <span><i class="lg-off"></i>Nghỉ</span>
+            <span><i class="lg-today"></i>Hôm nay</span>
         </div>
     </div>
 
@@ -115,6 +202,8 @@
         • Thứ 7: 8h30 – 12h00 = <b>0.5 công</b> · Chủ nhật nghỉ<br>
         • Nhận lương: <b>ngày 5 – 8</b> của tháng kế tiếp<br>
         • Công thức: <b>Lương ÷ công chuẩn × số công đã làm</b>
+    </div>
+    </div>
     </div>
 </div>
 
@@ -130,6 +219,22 @@
         get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
         set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
     };
+
+    // Theme: follows the device until the user picks one with the toggle
+    const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const isDark = () => (document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light')) === 'dark';
+    function syncThemeUI() {
+        $('themeToggle').textContent = isDark() ? '☀️' : '🌙';
+        document.querySelector('meta[name="theme-color"]').content = isDark() ? '#0f172a' : '#f4f6fb';
+    }
+    $('themeToggle').onclick = () => {
+        const next = isDark() ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem('theme', next); } catch {}
+        syncThemeUI();
+    };
+    darkQuery.addEventListener?.('change', syncThemeUI);
+    syncThemeUI();
 
     const defaultCong = d => (d === 0 ? 0 : d === 6 ? 0.5 : 1);
     const parseMoney = s => Number(String(s).replace(/\D/g, '')) || 0;

@@ -93,8 +93,38 @@
         .info { font-size: .88rem; color: var(--muted); line-height: 1.6; }
         .info b { color: var(--text); }
 
+        .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; margin-bottom: 16px;
+                background: var(--card); border-radius: 12px; box-shadow: var(--shadow); }
+        .tab { background: transparent; color: var(--muted); min-height: 42px; }
+        .tab.active { background: var(--primary); color: var(--on-primary); }
+        [hidden] { display: none !important; }
+        .exp-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .exp-form .full { grid-column: 1 / -1; }
+        select { width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; font-family: inherit;
+                 border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text); }
+        .btn-solid { background: var(--primary); color: var(--on-primary); width: 100%; min-height: 46px; font-size: 1rem; }
+        .link-btn { background: none; padding: 0; min-height: 0; font-size: .8rem; margin-top: 6px; }
+        .neg { color: var(--today) !important; }
+        .cats { margin-top: 14px; display: grid; gap: 8px; }
+        .cat-row { font-size: .85rem; }
+        .cat-row .bar-line { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .bar { height: 8px; border-radius: 99px; background: var(--off); overflow: hidden; }
+        .bar i { display: block; height: 100%; background: var(--primary); border-radius: 99px; }
+        .exp-day { margin-bottom: 14px; }
+        .exp-day-head { display: flex; justify-content: space-between; font-size: .82rem; color: var(--muted);
+                        font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .exp-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .exp-item .ic { font-size: 1.3rem; width: 32px; text-align: center; flex-shrink: 0; }
+        .exp-item .txt { flex: 1; min-width: 0; }
+        .exp-item .txt div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .exp-item .txt small { color: var(--muted); }
+        .exp-item .amt { font-weight: 700; white-space: nowrap; }
+        .del { background: none; color: var(--muted); min-height: 36px; width: 36px; padding: 0; font-size: 1rem; }
+        .empty-note { text-align: center; color: var(--muted); padding: 24px 0; font-size: .9rem; }
+
         @media (hover: hover) {
             .day:not(.empty):hover { border-color: var(--primary); }
+            .del:hover { color: var(--today); }
         }
 
         /* Laptop / PC: inputs and result on the left, calendar on the right */
@@ -140,6 +170,12 @@
         <button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện sáng / tối" title="Đổi giao diện sáng / tối">🌙</button>
     </div>
 
+    <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="salary" role="tab">💰 Tính lương</button>
+        <button class="tab" data-tab="expense" role="tab">🧾 Chi tiêu</button>
+    </div>
+
+    <section id="tab-salary">
     <div class="layout">
     <div>
     <div class="card">
@@ -205,6 +241,70 @@
     </div>
     </div>
     </div>
+    </section>
+
+    <section id="tab-expense" hidden>
+    <div class="layout">
+    <div>
+    <div class="card">
+        <div class="grid">
+            <div>
+                <label for="expMonth">Tháng chi tiêu</label>
+                <input id="expMonth" type="month">
+            </div>
+            <div>
+                <label for="income">Thu nhập tháng này (VNĐ)</label>
+                <input id="income" inputmode="numeric" placeholder="VD: 13.000.000">
+                <button class="link-btn" id="useSalary">↳ Lấy số tiền từ tab Tính lương</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card result">
+        <div class="detail">Còn dư</div>
+        <div class="money" id="remain">0 ₫</div>
+        <div class="detail" id="remainNote"></div>
+        <div class="stats">
+            <div class="stat"><b id="eIncome">0 ₫</b><span>Thu nhập</span></div>
+            <div class="stat"><b id="eSpent">0 ₫</b><span>Đã tiêu</span></div>
+            <div class="stat"><b id="eToday">0 ₫</b><span>Tiêu hôm nay</span></div>
+            <div class="stat"><b id="eAvg">0 ₫</b><span>Trung bình / ngày</span></div>
+        </div>
+        <div class="cats" id="cats"></div>
+    </div>
+    </div>
+
+    <div>
+    <div class="card">
+        <b>Ghi chi tiêu</b>
+        <form class="exp-form" id="expForm" style="margin-top:12px">
+            <div>
+                <label for="expDate">Ngày</label>
+                <input id="expDate" type="date" required>
+            </div>
+            <div>
+                <label for="expAmount">Số tiền</label>
+                <input id="expAmount" inputmode="numeric" placeholder="VD: 50.000" required>
+            </div>
+            <div class="full">
+                <label for="expCat">Loại</label>
+                <select id="expCat"></select>
+            </div>
+            <div class="full">
+                <label for="expNote">Ghi chú</label>
+                <input id="expNote" placeholder="VD: Ăn trưa, đổ xăng..." maxlength="100">
+            </div>
+            <div class="full"><button class="btn-solid" type="submit">+ Thêm khoản chi</button></div>
+        </form>
+    </div>
+
+    <div class="card">
+        <b id="expListTitle">Danh sách chi tiêu</b>
+        <div id="expList" style="margin-top:8px"></div>
+    </div>
+    </div>
+    </div>
+    </section>
 </div>
 
 <script>
@@ -281,6 +381,8 @@
         for (let d = 1; d <= daysInMonth(y, m); d++) monthCong += defaultCong(new Date(y, m - 1, d).getDay());
 
         $('money').textContent = fmt(perDay * worked);
+        // Remembered so the expense tab can pull this month's pay
+        store.set('pay-' + $('month').value, Math.round(perDay * worked));
         $('formula').textContent = `${fmt(salary)} ÷ ${standard} × ${worked} công`;
         $('sWorked').textContent = worked;
         $('sMonth').textContent = monthCong;
@@ -334,6 +436,144 @@
     $('clearAll').onclick = () => { fillUntil(0); $('worked').value = 0; save(); render(); };
 
     loadMonth();
+
+    // ---------- Tabs ----------
+    function showTab(name) {
+        document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+        $('tab-salary').hidden = name !== 'salary';
+        $('tab-expense').hidden = name !== 'expense';
+        try { localStorage.setItem('tab', name); } catch {}
+        if (name === 'expense') loadExpMonth();
+    }
+    document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+    // ---------- Expenses ----------
+    const CATS = [
+        ['food', '🍜', 'Ăn uống'], ['move', '⛽', 'Xăng xe, đi lại'], ['home', '🏠', 'Nhà, điện nước'],
+        ['shop', '🛍️', 'Mua sắm'], ['fun', '🎮', 'Giải trí'], ['other', '📦', 'Khác']
+    ];
+    const catOf = id => CATS.find(c => c[0] === id) || CATS[CATS.length - 1];
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const pad = n => String(n).padStart(2, '0');
+    const todayISO = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    // expenses: [{ id, date: 'YYYY-MM-DD', amount, cat, note }] for the selected month
+    let expenses = [];
+
+    $('expCat').innerHTML = CATS.map(c => `<option value="${c[0]}">${c[1]} ${c[2]}</option>`).join('');
+    $('expMonth').value = $('month').value;
+
+    function loadExpMonth() {
+        const key = $('expMonth').value;
+        expenses = store.get('exp-' + key) || [];
+        const income = store.get('income-' + key);
+        $('income').value = income != null ? Number(income).toLocaleString('vi-VN') : '';
+        if (income == null && store.get('pay-' + key)) useSalary();
+        // Default the entry date to today when inside this month, else the 1st
+        $('expDate').value = todayISO.startsWith(key) ? todayISO : key + '-01';
+        renderExp();
+    }
+
+    function saveExp() {
+        const key = $('expMonth').value;
+        store.set('exp-' + key, expenses);
+        store.set('income-' + key, parseMoney($('income').value));
+    }
+
+    function useSalary() {
+        const pay = store.get('pay-' + $('expMonth').value);
+        $('income').value = pay ? pay.toLocaleString('vi-VN') : '';
+        saveExp(); renderExp();
+    }
+
+    function renderExp() {
+        const key = $('expMonth').value;
+        const [y, m] = key.split('-').map(Number);
+        const income = parseMoney($('income').value);
+        const spent = expenses.reduce((a, e) => a + e.amount, 0);
+        const remain = income - spent;
+        const todaySpent = expenses.filter(e => e.date === todayISO).reduce((a, e) => a + e.amount, 0);
+        const dayCount = isCurrentMonth(y, m) ? today.getDate() : daysInMonth(y, m);
+
+        $('remain').textContent = fmt(remain);
+        $('remain').classList.toggle('neg', remain < 0);
+        $('remainNote').textContent = remain < 0 ? 'Bạn đã tiêu vượt thu nhập tháng này' :
+            income ? `Đã dùng ${Math.round(spent / income * 100)}% thu nhập` : 'Nhập thu nhập để biết còn dư bao nhiêu';
+        $('eIncome').textContent = fmt(income);
+        $('eSpent').textContent = fmt(spent);
+        $('eToday').textContent = fmt(todaySpent);
+        $('eAvg').textContent = fmt(spent / dayCount);
+
+        // Spending by category, largest first
+        const byCat = {};
+        expenses.forEach(e => byCat[e.cat] = (byCat[e.cat] || 0) + e.amount);
+        $('cats').innerHTML = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([id, sum]) => {
+            const c = catOf(id);
+            return `<div class="cat-row"><div class="bar-line"><span>${c[1]} ${c[2]}</span><b>${fmt(sum)}</b></div>
+                <div class="bar"><i style="width:${(sum / spent * 100).toFixed(1)}%"></i></div></div>`;
+        }).join('');
+
+        $('expListTitle').textContent = `Danh sách chi tiêu tháng ${m}/${y}`;
+        if (!expenses.length) {
+            $('expList').innerHTML = '<div class="empty-note">Chưa có khoản chi nào. Tối về nhớ ghi lại nhé! 📝</div>';
+            return;
+        }
+        const groups = {};
+        expenses.forEach(e => (groups[e.date] = groups[e.date] || []).push(e));
+        $('expList').innerHTML = Object.keys(groups).sort().reverse().map(date => {
+            const items = groups[date];
+            const [, mm, dd] = date.split('-');
+            const dow = DOW[new Date(date + 'T00:00').getDay()];
+            return `<div class="exp-day">
+                <div class="exp-day-head"><span>${dow}, ${dd}/${mm}${date === todayISO ? ' · Hôm nay' : ''}</span>
+                    <span>${fmt(items.reduce((a, e) => a + e.amount, 0))}</span></div>
+                ${items.map(e => {
+                    const c = catOf(e.cat);
+                    return `<div class="exp-item"><span class="ic">${c[1]}</span>
+                        <div class="txt"><div>${esc(e.note || c[2])}</div><small>${c[2]}</small></div>
+                        <span class="amt">${fmt(e.amount)}</span>
+                        <button class="del" data-id="${e.id}" aria-label="Xoá khoản chi">✕</button></div>`;
+                }).join('')}</div>`;
+        }).join('');
+    }
+
+    $('expList').onclick = e => {
+        const btn = e.target.closest('.del');
+        if (!btn || !confirm('Xoá khoản chi này?')) return;
+        expenses = expenses.filter(x => String(x.id) !== btn.dataset.id);
+        saveExp(); renderExp();
+    };
+
+    $('expForm').onsubmit = e => {
+        e.preventDefault();
+        const amount = parseMoney($('expAmount').value);
+        const date = $('expDate').value;
+        if (!amount || !date) return;
+        // An entry dated in another month is saved under that month
+        const key = date.slice(0, 7);
+        const entry = { id: Date.now(), date, amount, cat: $('expCat').value, note: $('expNote').value.trim() };
+        if (key === $('expMonth').value) {
+            expenses.push(entry); saveExp();
+        } else {
+            store.set('exp-' + key, [...(store.get('exp-' + key) || []), entry]);
+        }
+        $('expAmount').value = ''; $('expNote').value = '';
+        renderExp();
+        $('expAmount').focus();
+    };
+
+    $('expAmount').addEventListener('input', e => {
+        const n = parseMoney(e.target.value);
+        e.target.value = n ? n.toLocaleString('vi-VN') : '';
+    });
+    $('income').addEventListener('input', e => {
+        const n = parseMoney(e.target.value);
+        e.target.value = n ? n.toLocaleString('vi-VN') : '';
+        saveExp(); renderExp();
+    });
+    $('useSalary').onclick = useSalary;
+    $('expMonth').addEventListener('change', () => { if ($('expMonth').value) loadExpMonth(); });
+
+    showTab((() => { try { return localStorage.getItem('tab'); } catch { return null; } })() || 'salary');
 </script>
 </body>
 </html>

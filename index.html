@@ -93,6 +93,11 @@
         .info { font-size: .88rem; color: var(--muted); line-height: 1.6; }
         .info b { color: var(--text); }
 
+        .top-btns { display: flex; gap: 8px; flex-shrink: 0; }
+        .theme-toggle.sync-on { border-color: var(--ok); }
+        .sync-row { display: flex; gap: 8px; margin-top: 10px; }
+        .sync-row input { flex: 1; min-width: 0; }
+        .info a { color: var(--primary); }
         .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; margin-bottom: 16px;
                 background: var(--card); border-radius: 12px; box-shadow: var(--shadow); }
         .tab { background: transparent; color: var(--muted); min-height: 42px; }
@@ -167,7 +172,33 @@
             <h1>💰 Tính Lương Theo Ngày Công</h1>
             <p class="sub" id="todayText"></p>
         </div>
-        <button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện sáng / tối" title="Đổi giao diện sáng / tối">🌙</button>
+        <div class="top-btns">
+            <button class="theme-toggle" id="syncBtn" aria-label="Đồng bộ dữ liệu" title="Đồng bộ dữ liệu">☁️</button>
+            <button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện sáng / tối" title="Đổi giao diện sáng / tối">🌙</button>
+        </div>
+    </div>
+
+    <div class="card info" id="syncPanel" hidden>
+        <b>☁️ Đồng bộ giữa máy tính và điện thoại</b>
+        <div id="syncSetup">
+            Dữ liệu được lưu vào một <b>Gist bí mật</b> trên tài khoản GitHub của bạn. Làm 1 lần trên <b>mỗi máy</b>:<br>
+            1. Mở <a href="https://github.com/settings/tokens/new?scopes=gist&description=tinh-luong-sync" target="_blank" rel="noopener">trang tạo token này</a>,
+               mục <b>Expiration</b> chọn <b>No expiration</b>, giữ dấu tích <b>gist</b>, bấm <b>Generate token</b>.<br>
+            2. Copy token (bắt đầu bằng <b>ghp_</b>) dán vào ô dưới, bấm <b>Kết nối</b>.<br>
+            Dùng <b>cùng một token</b> cho máy tính và điện thoại.
+            <div class="sync-row">
+                <input id="syncToken" type="password" placeholder="ghp_..." autocomplete="off">
+                <button id="syncConnect">Kết nối</button>
+            </div>
+        </div>
+        <div id="syncConnected" hidden>
+            Đã bật đồng bộ. Dữ liệu tự đồng bộ sau mỗi lần thay đổi, khi mở lại trang và mỗi phút một lần.
+            <div class="actions">
+                <button id="syncNowBtn">🔄 Đồng bộ ngay</button>
+                <button id="syncOff">Ngắt đồng bộ</button>
+            </div>
+        </div>
+        <div style="margin-top:8px">Trạng thái: <b id="syncStatus">Chưa bật đồng bộ</b></div>
     </div>
 
     <div class="tabs" role="tablist">
@@ -315,9 +346,23 @@
     // days[dateNumber] = 0 | 0.5 | 1 for the selected month
     let days = {};
 
+    // Keys that are synced between devices (theme, tab and sync settings stay per device)
+    const isSyncKey = k => /^(salary|standard|exp-deleted|(days|pay|exp|income)-\d{4}-\d{2})$/.test(k);
     const store = {
         get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+        set(k, v) {
+            try {
+                const json = JSON.stringify(v);
+                if (localStorage.getItem(k) === json) return;
+                localStorage.setItem(k, json);
+                if (isSyncKey(k)) {
+                    const ts = store.get('sync-ts') || {};
+                    ts[k] = Date.now();
+                    localStorage.setItem('sync-ts', JSON.stringify(ts));
+                    scheduleSync();
+                }
+            } catch {}
+        }
     };
 
     // Theme: follows the device until the user picks one with the toggle
@@ -540,6 +585,8 @@
         const btn = e.target.closest('.del');
         if (!btn || !confirm('Xoá khoản chi này?')) return;
         expenses = expenses.filter(x => String(x.id) !== btn.dataset.id);
+        // Remember deletions so syncing doesn't bring the entry back from another device
+        store.set('exp-deleted', [...(store.get('exp-deleted') || []), Number(btn.dataset.id)]);
         saveExp(); renderExp();
     };
 
@@ -574,6 +621,150 @@
     $('expMonth').addEventListener('change', () => { if ($('expMonth').value) loadExpMonth(); });
 
     showTab((() => { try { return localStorage.getItem('tab'); } catch { return null; } })() || 'salary');
+
+    // ---------- Sync via a secret GitHub Gist ----------
+    const GIST_FILE = 'tinh-luong-data.json';
+    const GIST_DESC = 'tinh-luong-sync (dữ liệu website tính lương)';
+    // var: scheduleSync() can run from store.set() before this line is reached
+    var syncTimer = null, syncing = false, syncAgain = false;
+
+    const syncCfg = () => ({ token: localStorage.getItem('sync-token'), gist: localStorage.getItem('sync-gist') });
+    function setSyncStatus(text, state) {
+        $('syncStatus').textContent = text;
+        $('syncBtn').textContent = state === 'ok' ? '☁️' : state === 'err' ? '⚠️' : state === 'busy' ? '🔄' : '☁️';
+        $('syncBtn').classList.toggle('sync-on', state === 'ok' || state === 'busy');
+    }
+    function scheduleSync() {
+        if (!localStorage.getItem('sync-token')) return;
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(syncNow, 1500);
+    }
+
+    async function gh(path, opts = {}) {
+        const res = await fetch('https://api.github.com' + path, {
+            ...opts, cache: 'no-store',
+            headers: { Authorization: 'Bearer ' + syncCfg().token, Accept: 'application/vnd.github+json',
+                       ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }
+        });
+        if (res.status === 401) throw new Error('Token sai hoặc đã hết hạn');
+        if (!res.ok) throw new Error('GitHub lỗi ' + res.status);
+        return res.json();
+    }
+
+    function localSnapshot() {
+        const data = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (isSyncKey(k)) data[k] = store.get(k);
+        }
+        return { data, ts: store.get('sync-ts') || {} };
+    }
+
+    // Expense lists are merged entry by entry; every other key keeps the newest version
+    function merge(a, b) {
+        const out = { data: {}, ts: {} };
+        const deleted = new Set([...(a.data['exp-deleted'] || []), ...(b.data['exp-deleted'] || [])]);
+        const keys = new Set([...Object.keys(a.data), ...Object.keys(b.data)]);
+        keys.forEach(k => {
+            const ta = a.ts[k] || 0, tb = b.ts[k] || 0;
+            out.ts[k] = Math.max(ta, tb);
+            if (k === 'exp-deleted') out.data[k] = [...deleted];
+            else if (k.startsWith('exp-')) {
+                const byId = new Map();
+                [...(a.data[k] || []), ...(b.data[k] || [])].forEach(e => byId.set(e.id, e));
+                out.data[k] = [...byId.values()].filter(e => !deleted.has(e.id)).sort((x, y) => x.id - y.id);
+            } else out.data[k] = (k in b.data && (tb > ta || !(k in a.data))) ? b.data[k] : a.data[k];
+        });
+        return out;
+    }
+
+    async function findOrCreateGist() {
+        if (syncCfg().gist) return syncCfg().gist;
+        for (let page = 1; page <= 5; page++) {
+            const list = await gh(`/gists?per_page=100&page=${page}`);
+            const found = list.find(g => g.files && g.files[GIST_FILE]);
+            if (found) { localStorage.setItem('sync-gist', found.id); return found.id; }
+            if (list.length < 100) break;
+        }
+        const created = await gh('/gists', { method: 'POST', body: JSON.stringify({
+            description: GIST_DESC, public: false,
+            files: { [GIST_FILE]: { content: JSON.stringify({ data: {}, ts: {} }) } }
+        }) });
+        localStorage.setItem('sync-gist', created.id);
+        return created.id;
+    }
+
+    async function syncNow() {
+        if (!syncCfg().token) return;
+        if (syncing) { syncAgain = true; return; }
+        syncing = true;
+        setSyncStatus('Đang đồng bộ...', 'busy');
+        try {
+            const id = await findOrCreateGist();
+            const gist = await gh('/gists/' + id);
+            const file = gist.files[GIST_FILE];
+            let remote = { data: {}, ts: {} };
+            try { if (file) remote = JSON.parse(file.content); } catch {}
+            const merged = merge(localSnapshot(), remote);
+            // Write merged data back without bumping timestamps
+            Object.entries(merged.data).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
+            localStorage.setItem('sync-ts', JSON.stringify(merged.ts));
+            const body = JSON.stringify(merged);
+            if (!file || file.content !== body)
+                await gh('/gists/' + id, { method: 'PATCH', body: JSON.stringify({ files: { [GIST_FILE]: { content: body } } }) });
+            refreshUI();
+            setSyncStatus('Đã đồng bộ lúc ' + new Date().toLocaleTimeString('vi-VN'), 'ok');
+        } catch (e) {
+            setSyncStatus('Lỗi đồng bộ: ' + e.message, 'err');
+        } finally {
+            syncing = false;
+            if (syncAgain) { syncAgain = false; scheduleSync(); }
+        }
+    }
+
+    // Re-read inputs from storage, but leave the field the user is typing in alone
+    function refreshUI() {
+        const active = document.activeElement;
+        if (active !== $('salary')) {
+            const s = store.get('salary');
+            $('salary').value = s || '';
+        }
+        if (active !== $('standard')) $('standard').value = store.get('standard') || 24.5;
+        loadMonth();
+        if (!$('tab-expense').hidden && active !== $('income')) loadExpMonth();
+        else if (!$('tab-expense').hidden) { expenses = store.get('exp-' + $('expMonth').value) || []; renderExp(); }
+    }
+
+    function syncUI() {
+        const on = !!syncCfg().token;
+        $('syncSetup').hidden = on;
+        $('syncConnected').hidden = !on;
+        if (!on) setSyncStatus('Chưa bật đồng bộ', 'off');
+    }
+
+    $('syncBtn').onclick = () => { $('syncPanel').hidden = !$('syncPanel').hidden; };
+    $('syncConnect').onclick = async () => {
+        const token = $('syncToken').value.trim();
+        if (!token) return;
+        localStorage.setItem('sync-token', token);
+        localStorage.removeItem('sync-gist');
+        $('syncToken').value = '';
+        syncUI();
+        await syncNow();
+        if ($('syncBtn').textContent === '⚠️') { localStorage.removeItem('sync-token'); syncUI(); setSyncStatus($('syncStatus').textContent, 'err'); }
+    };
+    $('syncNowBtn').onclick = syncNow;
+    $('syncOff').onclick = () => {
+        if (!confirm('Ngắt đồng bộ trên máy này? Dữ liệu trên máy và trên GitHub vẫn được giữ nguyên.')) return;
+        localStorage.removeItem('sync-token'); localStorage.removeItem('sync-gist');
+        syncUI();
+    };
+
+    syncUI();
+    if (syncCfg().token) syncNow();
+    // Pull changes made on the other device whenever this one comes back into view
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+    setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60000);
 </script>
 </body>
 </html>
